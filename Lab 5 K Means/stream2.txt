@@ -1,0 +1,82 @@
+var source_file_path
+set source_file_path = "G:\Data Mining Lab\Lab 5 K Means"
+var source_file_name
+set source_file_name = "\s1_modified.csv"
+var lower_limit
+var upper_limit
+set lower_limit = 2
+set upper_limit = 20
+var kname
+var dname
+var t
+var temp
+var d
+var gname
+var g
+var vname
+var ymid
+set ymid = 150 * (^upper_limit/2)
+create stream "Kmeans Analysis using Scripting"
+set vname = create variablefilenode
+position ^vname at 150 ^ymid
+set ^vname.full_filename = ^source_file_path>< ^source_file_name
+set ^vname.read_field_names = true
+set ^vname.delimit_space = true
+set ^vname.multi_blank = true
+set ^vname.default_value_mode = Read
+for i from ^lower_limit to ^upper_limit
+    set temp = 150 * (^i-1)
+    set kname = create kmeansnode
+    position ^kname at 250 ^temp
+    set t = "Kmeans " >< ^i
+    set ^kname.model_name = ^t
+    connect ^vname to ^kname
+    set ^kname.num_clusters = ^i
+    set ^kname.gen_distance = true
+    execute ^kname
+    insert model ^t:kmeansnode at 350 ^temp
+    connect ^vname to ^t:applykmeansnode
+    set dname = create derivenode
+    position ^dname at 450 ^temp
+    connect ^t:applykmeansnode to ^dname
+    set d = "Square Error " ><^i
+    set ^dname.new_name = ^d
+    set ^dname.result_type = Formula
+    set ^dname.formula_expr = "'$KMD-" >< ^t ><"'*'$KMD-"><^t ><"'"
+    set gname = create setglobalsnode
+    position ^gname at 550 ^temp
+    set ^gname.custom_name = ^d
+    connect ^dname to ^gname
+    set ^d:setglobalsnode.globals.^d = [Sum]
+    set ^d:setglobalsnode.clear_first = False
+    execute ^dname
+endfor
+
+create reportnode
+connect ^vname to :reportnode
+set :reportnode.output_mode = File
+set :reportnode.output_format = Text
+set :reportnode.full_filename = ^source_file_path>< "kmeansoutput.txt"
+set :reportnode.text = ""
+for i from ^lower_limit to ^upper_limit
+    set :reportnode.text = :reportnode.text>< ^i><",[@GLOBAL_SUM('Square Error " >< ^i>< "')]\n"
+endfor
+execute :reportnode
+set vname = create variablefilenode
+position ^vname at 650 ^ymid
+set ^vname.full_filename = ^source_file_path>< "kmeansoutput.txt"
+set ^vname.read_field_names = false
+set ^vname.delimit_comma = true
+set ^vname.multi_blank = true
+set ^vname.default_value_mode = Read
+set ^vname.type.field1 = Range
+set ^vname.type.field2 = Range
+set ^vname.new_name.field1 = "No of Clusters"
+set ^vname.new_name.field2 = "Sum of Squared Errors"
+create plotnode
+position :plotnode at 750 ^ymid
+connect ^vname to :plotnode
+set :plotnode.x_field = "No of Clusters"
+set :plotnode.y_field = "Sum of Squared Errors"
+set :plotnode.title = "Plot of SSE Vs. K"
+execute :plotnode
